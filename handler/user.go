@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bwastartup/auth"
 	"bwastartup/helper"
 	"bwastartup/user"
 	"fmt"
@@ -11,10 +12,11 @@ import (
 
 type userHandler struct {
 	userService user.Service
+	authService auth.Service
 }
 
-func NewUserHandler(userService user.Service) *userHandler {
-	return &userHandler{userService}
+func NewUserHandler(userService user.Service, authService auth.Service) *userHandler {
+	return &userHandler{userService, authService}
 }
 
 func (u *userHandler) Register(context *gin.Context) {
@@ -36,7 +38,14 @@ func (u *userHandler) Register(context *gin.Context) {
 		return
 	}
 
-	FormatUser := user.FormatUser(Newuser, "token")
+	token, err := u.authService.GenerateToken(Newuser.ID)
+	if err != nil {
+		errorMessage := gin.H{"errors": err}
+		response := helper.APIResponse("Register failed", http.StatusBadRequest, "error", errorMessage)
+		context.JSON(http.StatusBadRequest, response)
+		return
+	}
+	FormatUser := user.FormatUser(Newuser, token)
 
 	response := helper.APIResponse("Register succes", http.StatusOK, "succes", FormatUser)
 
@@ -62,7 +71,15 @@ func (u *userHandler) Login(context *gin.Context) {
 		return
 	}
 
-	data := user.FormatUser(loggedUser, "trdsfsdfs")
+	token, err := u.authService.GenerateToken(loggedUser.ID)
+	if err != nil {
+		errorMessage := gin.H{"errors": err}
+		response := helper.APIResponse("Register failed", http.StatusBadRequest, "error", errorMessage)
+		context.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	data := user.FormatUser(loggedUser, token)
 	response := helper.APIResponse("Successfully Loggein", http.StatusOK, "success", data)
 	context.JSON(http.StatusOK, response)
 }
@@ -106,7 +123,8 @@ func (u *userHandler) UploadAvatar(context *gin.Context) {
 		return
 	}
 
-	userId := 10
+	currentUser := context.MustGet("currentUser").(user.User)
+	userId := currentUser.ID
 	path := fmt.Sprintf("images/%d-%s", userId, file.Filename)
 	err = context.SaveUploadedFile(file, path)
 	if err != nil {
